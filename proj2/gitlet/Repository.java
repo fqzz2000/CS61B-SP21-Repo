@@ -60,7 +60,7 @@ public class Repository {
         if (commit.secondParent != null) {
             System.out.println("Merge: " + commit.parent.substring(0, 7) + " " + commit.secondParent.substring(0, 7));
         }
-        System.out.println(String.format("Date: %1$ta %1$tb %1$tT %1$tY %1$tz", commit.date));
+        System.out.println(String.format("Date: %1$ta %1$tb %1$te %1$tT %1$tY %1$tz", commit.date));
         System.out.println(commit.message);
         System.out.println();
         return;
@@ -141,9 +141,14 @@ public class Repository {
     public static void add(String file) {
         // validate if there is an initialized repo
         validateRepoExisted();
-
+        if (file.substring(file.length() - 1) == "/" || file.substring(file.length() - 1) == "\\") {
+            file = file.substring(0, file.length() - 1);
+        }
         // process file to be added
         File toAdd = join(CWD, file);
+        if (!toAdd.exists()) {
+            printExit("File does not exist.");
+        }
         byte[] fileContent =  readContents(toAdd);
         // compute sha-1 for the toAdd file
         String fileSha1 = sha1(fileContent);
@@ -428,7 +433,7 @@ public class Repository {
         // search for commitName
         String head = getHead();
         Commit commit = getCommit(head);
-        if (commitName.length() <= 40) {
+        if (commitName.length() < 40) {
             ArrayList<String> commitFull = searchCommitName(commitName);
             if (commitFull.size() == 1) {
                 commit = getCommit(commitFull.get(0));
@@ -439,7 +444,7 @@ public class Repository {
                 System.out.println("The commit id ambiguous");
                 System.exit(1);
             }
-        } else if (commitName.length() == 160 && join(COMMITS_DIR, commitName).exists()) {
+        } else if (commitName.length() == 40 && join(COMMITS_DIR, commitName).exists()) {
             commit = getCommit(commitName);
         } else {
             System.out.println("No commit with that id exists.");
