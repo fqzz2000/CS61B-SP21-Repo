@@ -32,7 +32,15 @@ class Utils {
     static final int UID_LENGTH = 40;
 
     /* SHA-1 HASH VALUES. */
-
+    public static void printExit(String msg) {
+        System.out.println(msg);
+        System.exit(0);
+    }
+    public static void validateArgNum(String[] args, int num) {
+        if (args.length != num) {
+            printExit("Incorrect operands");
+        }
+    }
     /** Returns the SHA-1 hash of the concatenation of VALS, which may
      *  be any mixture of byte arrays and Strings. */
     static String sha1(Object... vals) {
