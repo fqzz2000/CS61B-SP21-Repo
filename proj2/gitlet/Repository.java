@@ -33,6 +33,76 @@ public class Repository {
     public static final File STAGED_DIR = join(GITLET_DIR, "stagedObj");
 
     /* TODO: fill in the rest of this class. */
+    // copy the given file from source directory to target directory
+    private static void copyFileTo(String fName, File sourceDir, String tName, File targetDir) {
+        File sourceFile = join(sourceDir, fName);
+        if (!sourceFile.exists()) {
+            printExit("source file not exist");
+        }
+        File targetFile = join(targetDir, tName);
+        try {
+            if (!targetFile.exists()) {
+                targetFile.createNewFile();
+            }
+            writeContents(targetFile, readContents(sourceFile));
+        } catch(Exception e) {
+            printExit("fail to create the file");
+        }
+    }
+    // return the message should be put in the conflicted file
+    // in format
+    /*
+        <<<<<<< HEAD
+        contents of file in current branch
+        =======
+        contents of file in given branch
+        >>>>>>>
+     */
+    private static String getConfMsg(String headHash, String otherHash) {
+        String headString = "\n";
+        String otherString = "\n";
+        if (headHash != null) {
+            File headFile = join(OBJECTS_DIR, headHash);
+            headString = readContentsAsString(headFile);
+        }
+        if (otherHash != null) {
+            File otherFile = join(OBJECTS_DIR, otherHash);
+            otherString = readContentsAsString(otherFile);
+        }
+
+        String res = "<<<<<<< HEAD\n" + headString + "=======\n" + otherString + ">>>>>>>\n";
+        return res;
+    }
+    // write conflict message to the file in CWD
+    private static void writeConf(String content, String fileName) {
+        File targetFile = join(CWD, fileName);
+        try {
+            if (!targetFile.exists()) {
+                targetFile.createNewFile();
+            }
+            writeContents(targetFile, content);
+        } catch (Exception e) {
+            printExit("fail to create new file");
+        }
+    }
+    // handling conflicts for a specific file
+    private static void handleConf(String headHash, String otherHash, String file) {
+        System.out.println("Encountered a merge conflict.");
+        //conflict case
+        String confMsg = getConfMsg(headHash, otherHash);
+        writeConf(confMsg, file);
+        // staged file for change
+        add(file);
+    }
+    // add a file to staged and write back to dir
+    private  static void addToStaged(String key, String value, File sourceDir) {
+        // copy file to map
+        HashMap<String, String> staged = getStaged();
+        staged.put(key, value);
+        writeObject(join(GITLET_DIR, "STAGED"), staged);
+        // copy file to staged file
+        copyFileTo(value, sourceDir, value, STAGED_DIR);
+    }
     // validate if the repo initialized
     private static void validateRepoExisted() {
         if (!GITLET_DIR.exists()) {
@@ -52,6 +122,35 @@ public class Repository {
         HashMap<String, String> branch = readObject(branchesPath, (new HashMap<String, String>()).getClass());
         return branch;
     }
+    // clear CWD and copy all files from the given commit to CWD
+    private static void setCommit(Commit commit) {
+        HashMap<String, String> staged = getStaged();
+        HashMap<String, String> branches = getBranch();
+        // delete all files in staged
+        for (String file : plainFilenamesIn(STAGED_DIR)) {
+            join(STAGED_DIR, file).delete();
+        }
+        staged.clear();
+        writeObject(join(GITLET_DIR, "STAGED"), staged);
+
+        // delete all files in CWD
+        for (String file : plainFilenamesIn(CWD)) {
+            join(CWD, file).delete();
+        }
+
+        // copy all files from branch needed
+
+        for (String key :commit.files.keySet()) {
+            try {
+                File newFile = join(CWD, key);
+                newFile.createNewFile();
+                byte[] newContent = readContents(join(OBJECTS_DIR, commit.files.get(key)));
+                writeContents(newFile, newContent);
+            } catch (Exception e) {
+                System.err.println(e);
+            }
+        }
+    }
 
     private static void printCommit(String commitHash, Commit commit) {
 
@@ -66,6 +165,53 @@ public class Repository {
         return;
     }
     // get a commit object by its name
+    private static void forwardCommit(String msg, String secondParent) {
+        // create a new commit
+        HashMap<String, String> staged = getStaged();
+        String prevHead = getHead();
+        Commit prevCommit = getCommit(prevHead);
+        Commit newCommit = new Commit(prevCommit);
+        newCommit.parent = prevHead;
+        newCommit.secondParent = secondParent;
+        newCommit.message = msg;
+
+        // copy staged file into the commit
+        for (Map.Entry<String, String> entry : staged.entrySet()) {
+            // if the entry is NULL, indicate that file deleted, remove pair from the commit
+            if (entry.getValue() == null) {
+                newCommit.files.remove(entry.getKey());
+                continue;
+            }
+            // put name sha1 pair into commit
+            newCommit.files.put(entry.getKey(), entry.getValue());
+            // copy files into objects dir
+            File copiedFile = join(OBJECTS_DIR, entry.getValue());
+            try {
+                copiedFile.createNewFile();
+            } catch (Exception e) {
+                System.err.println(e);
+                System.exit(0);
+            }
+            File stagedFile = join(STAGED_DIR, entry.getValue());
+            byte[] stagedContent = readContents(stagedFile);
+            writeContents(copiedFile, stagedContent);
+            // delete corresponding file in stagedObj
+            stagedFile.delete();
+        }
+        // empty the staged Map and save back
+        staged.clear();
+        writeObject(join(GITLET_DIR, "STAGED"), staged);
+        // save the new commit
+        String newSha1 = sha1(serialize(newCommit));
+        writeObject(join(COMMITS_DIR, newSha1), newCommit);
+        // update head
+        String currentBranch = getHeadBranch();
+        HashMap<String, String> branchMap = getBranch();
+        writeContents(join(GITLET_DIR, "HEAD"), newSha1 + "\n" + currentBranch);
+        // update branch
+        branchMap.put(currentBranch, newSha1);
+        writeObject(join(GITLET_DIR, "BRANCHES"), branchMap);
+    }
     private static Commit getCommit(String commitName) {
         return readObject(join(COMMITS_DIR, commitName), (new Commit()).getClass());
     }
@@ -168,17 +314,11 @@ public class Repository {
                 // if another version of file already in the staged area, replace it
                 if (staged.get(file) != null && !staged.get(file).equals(fileSha1)) {
                     join(STAGED_DIR, staged.get(file)).delete();
-//                    ///////////////////////////// FOR DEBUGGING PURPOSE//////////////////////////////////
-//                    System.out.println(staged.get(file).equals(fileSha1));
-//                    System.out.println(fileSha1);
-//                    System.out.println(staged.get(file) + " are deleted");
                 }
                 File toAddInObj = join(STAGED_DIR, fileSha1);
                 toAddInObj.createNewFile();
                 writeContents(toAddInObj, fileContent);
                 staged.put(file, fileSha1); // add file to be added to staged area
-//                ///////////////////////////// FOR DEBUGGING PURPOSE//////////////////////////////////
-//                System.out.println("file " + file + " added, the sha1 is " + fileSha1);
             } catch (Exception e) {
                 System.err.println(e);
             }
@@ -191,7 +331,6 @@ public class Repository {
                 needDelete.delete();
                 staged.remove(file);
             }
-
         }
         // write staged back to STAGED file
         writeObject(join(GITLET_DIR, "STAGED"), staged);
@@ -207,50 +346,7 @@ public class Repository {
             System.out.println("No changes added to the commit.");
             System.exit(0);
         }
-
-        // create a new commit
-        String prevHead = getHead();
-        Commit prevCommit = getCommit(prevHead);
-        Commit newCommit = new Commit(prevCommit);
-        newCommit.parent = prevHead;
-        newCommit.message = msg;
-
-        // copy staged file into the commit
-        for (Map.Entry<String, String> entry : staged.entrySet()) {
-            // if the entry is NULL, indicate that file deleted, remove pair from the commit
-            if (entry.getValue() == null) {
-                newCommit.files.remove(entry.getKey());
-                continue;
-            }
-            // put name sha1 pair into commit
-            newCommit.files.put(entry.getKey(), entry.getValue());
-            // copy files into objects dir
-            File copiedFile = join(OBJECTS_DIR, entry.getValue());
-            try {
-                copiedFile.createNewFile();
-            } catch (Exception e) {
-                System.err.println(e);
-                System.exit(0);
-            }
-            File stagedFile = join(STAGED_DIR, entry.getValue());
-            byte[] stagedContent = readContents(stagedFile);
-            writeContents(copiedFile, stagedContent);
-            // delete corresponding file in stagedObj
-            stagedFile.delete();
-        }
-        // empty the staged Map and save back
-        staged.clear();
-        writeObject(join(GITLET_DIR, "STAGED"), staged);
-        // save the new commit
-        String newSha1 = sha1(serialize(newCommit));
-        writeObject(join(COMMITS_DIR, newSha1), newCommit);
-        // update head and branch
-        String currentBranch = getHeadBranch();
-        HashMap<String, String> branchMap = getBranch();
-        writeContents(join(GITLET_DIR, "HEAD"), newSha1 + "\n" + currentBranch);
-        branchMap.put(currentBranch, newSha1);
-        writeObject(join(GITLET_DIR, "BRANCHES"), branchMap);
-
+        forwardCommit(msg, null);
         return;
     }
 
@@ -262,6 +358,10 @@ public class Repository {
         HashMap<String, String> staged = getStaged();
         String head = getHead();
         Commit currentCommit = getCommit(head);
+        // if file neigher in staged nor current commit
+        if (!staged.containsKey(rmFile) && !currentCommit.files.containsKey(rmFile)) {
+            printExit("No reason to remove the file.");
+        }
         // if the file is staged, remove from staged and delete the corresponding file
         if (staged.get(rmFile) != null) {
             File fileToRemove = join(STAGED_DIR, staged.get(rmFile));
@@ -353,7 +453,7 @@ public class Repository {
         }
         // prepare modList
         for (String file : curr.files.keySet()) {
-            if (!join(CWD, file).exists()) {
+            if (!join(CWD, file).exists() && !staged.containsKey(file)) {
                 modList.add(file + "(delete)");
             } else {
                 byte[] fileContent = readContents(join(CWD, file));
@@ -406,6 +506,27 @@ public class Repository {
         return;
     }
     public static void checkoutBranch(String bName) {
+        Commit curr = getCommit(getHead());
+        String currBranch = getHeadBranch();
+        HashMap<String, String> staged = getStaged();
+        HashMap<String, String> branches = getBranch();
+        if (currBranch == bName) {
+            printExit("No need to checkout the current branch.");
+        }
+        if (branches.get(bName) == null) {
+            printExit("No such branch exists.");
+        }
+        for (String file : plainFilenamesIn(CWD)) {
+            if (!curr.files.containsKey(file) && !staged.containsKey(file)) {
+                printExit("There is an untracked file in the way; delete it, or add and commit it first.");
+            }
+        }
+        String newBranchHead = branches.get(bName);
+        Commit newBranchCommit = getCommit(newBranchHead);
+        setCommit(newBranchCommit);
+        // update HEAD
+        String newHeadInfo = newBranchHead + "\n" + bName;
+        writeContents(join(GITLET_DIR, "HEAD"), newHeadInfo);
         return;
     }
 
@@ -465,6 +586,188 @@ public class Repository {
         } catch (Exception e) {
             System.err.println(e);
             System.exit(0);
+        }
+        return;
+    }
+
+    public static void createBranch(String bName) {
+        HashMap<String, String> branches = getBranch();
+        if (branches.containsKey(bName)) {
+            printExit("A branch with that name already exists.");
+        }
+        String currentHead = getHead();
+        // set a new branch
+        branches.put(bName, currentHead);
+        writeObject(join(GITLET_DIR, "BRANCHES"), branches);
+        return;
+
+    }
+
+    public static void removeBranch(String bName) {
+        HashMap<String, String> branches = getBranch();
+        String currentBranchName = getHeadBranch();
+        if (!branches.containsKey(bName)) {
+            printExit("A branch with that name does not exist.");
+        }
+        if (currentBranchName.equals(bName)) {
+            printExit("Cannot remove the current branch.");
+        }
+        branches.remove(bName);
+        writeObject(join(GITLET_DIR, "BRANCHES"), branches);
+
+    }
+
+    public static void reset(String commitName) {
+        String head = getHead();
+        String bName = getHeadBranch();
+        Commit curr = getCommit(head);
+        HashMap<String, String> staged = getStaged();
+        for (String file : plainFilenamesIn(CWD)) {
+            if (!curr.files.containsKey(file) && !staged.containsKey(file)) {
+                printExit("There is an untracked file in the way; delete it, or add and commit it first.");
+            }
+        }
+        ArrayList<String> commits  = searchCommitName(commitName);
+        if (commits.size() == 0) {
+            printExit("No commit with that id exists.");
+        } else if (commits.size() > 1) {
+            printExit("Ambiguous commit id");
+        }
+        commitName = commits.get(0);
+        Commit newBranchCommit = getCommit(commitName);
+        setCommit(newBranchCommit);
+        // update HEAD
+        String newHeadInfo = commitName + "\n" + bName;
+        writeContents(join(GITLET_DIR, "HEAD"), newHeadInfo);
+    }
+    // find the lowest ancestor of two branch.
+    private static String findLowestAncestor(String branch1, String branch2) {
+        HashSet<String> ancestors = new HashSet<>();
+        HashMap<String, String> branches = getBranch();
+        String ptr1 = branches.get(branch1);
+        String ptr2 = branches.get(branch2);
+        // find lowest ancestor
+        while (branch1 != null && branch2 != null) {
+            // if ptr in hashset, means that we found common ancestor
+            if (ancestors.contains(ptr1)) {
+                return ptr1;
+            }
+            ancestors.add(ptr1);
+            Commit ptr1Commit = getCommit(ptr1);
+            ptr1 = ptr1Commit.parent;
+            if (ancestors.contains(ptr2)) {
+                return ptr2;
+            }
+            ancestors.add(ptr2);
+            Commit ptr2Commit = getCommit(ptr2);
+            ptr2 = ptr2Commit.parent;
+        }
+        return null;
+    }
+    public static void merge(String bName) {
+        String currentBranch = getHeadBranch();
+        Commit curr = getCommit(getHead());
+        HashMap<String, String> branches = getBranch();
+        HashMap<String, String> staged = getStaged();
+        if (staged.size() != 0) {
+            printExit("You have uncommitted changes.");
+        }
+        if (bName.equals(currentBranch)) {
+            printExit("Cannot merge a branch with itself.");
+        }
+        if (!branches.containsKey(bName)) {
+            printExit("A branch with that name does not exist.");
+        }
+
+        // find the lowest ancestor
+        String split = findLowestAncestor(bName, currentBranch);
+        System.out.println("split is " + split);
+        if (split.equals(branches.get(bName))) {
+            printExit("Given branch is an ancestor of the current branch.");
+        }
+        if (split.equals(branches.get(currentBranch))) {
+            System.out.println("Current branch fast-forwarded.");
+            checkoutBranch(bName);
+
+        }
+        for (String file : plainFilenamesIn(CWD)) {
+            if (!curr.files.containsKey(file) && !staged.containsKey(file)) {
+                printExit("There is an untracked file in the way; delete it, or add and commit it first.");
+            }
+        }
+
+        Commit splitCommit = getCommit(split);
+        Commit headCommit = getCommit(getHead());
+        Commit otherCommit = getCommit(branches.get(bName));
+        // conduct 8 rules
+
+        // iterate through all files in otherCommit and splitCommit
+        // no need to iterate files in headCummit because if a file present in head but not in split and other
+        // we don't need to do anything with it
+
+        //all files in otherCommit and splitCommit
+        HashSet<String> allFiles = new HashSet<>();
+        allFiles.addAll(splitCommit.files.keySet());
+        allFiles.addAll(otherCommit.files.keySet());
+
+        // iterate through all files
+        for (String file : allFiles) {
+            boolean inSplit = splitCommit.files.containsKey(file);
+            boolean inOther = otherCommit.files.containsKey(file);
+            boolean inHead = headCommit.files.containsKey(file);
+            String splitHash = splitCommit.files.get(file);
+            String otherHash = otherCommit.files.get(file);
+            String headHash = headCommit.files.get(file);
+            // implement 8 rules
+            // if file in other, not in split and head (file added in other)
+            if (inOther && !inSplit && !inHead) {
+                // copy otherHash to CWD
+                copyFileTo(otherHash, OBJECTS_DIR, file, CWD);
+                // add file to staged
+                add(file);
+            }
+            // if file modified in otherCommit, no change in head copy to CWD
+            if (inSplit && inOther && inHead && headHash.equals(splitHash) && !otherHash.equals(headHash)) {
+                // copy otherHash to CWD
+                copyFileTo(otherHash, OBJECTS_DIR, file, CWD);
+                // add file to staged
+                add(file);
+            }
+            // if file removed in other, no change in head, removed from CWD and un-track
+            if (inSplit && !inOther && inHead && headHash.equals(splitHash)) {
+                // delete from CWD
+                // un-track (label as removed)
+                rm(file);
+            }
+            // ############## conflict case #############
+            // both modified
+            if (inSplit && inOther && inHead &&
+                    !splitHash.equals(headHash) &&
+                    !headHash.equals(otherHash) &&
+                    !otherHash.equals(splitHash)) {
+                    handleConf(headHash, otherHash, file);
+
+            }
+            // both add but different content
+            if (!inSplit && inOther && inHead && !otherHash.equals(headHash)) {
+                // conflict case
+                handleConf(headHash, otherHash, file);
+            }
+            // other modified head removed
+            if (inSplit && inOther && !inHead && !otherHash.equals(splitHash)) {
+                // conflict case
+                handleConf(headHash, otherHash, file);
+            }
+            // head modified other rmeoved
+            if (inSplit && !inOther && inHead && !headHash.equals(splitHash)) {
+                // conflict case
+                handleConf(headHash, otherHash, file);
+            }
+            //  ########################### other case ######################
+            // remain unchanged
+
+            // Commit the Change
+            forwardCommit("Merged " +  bName+ " into " + currentBranch + " .", otherHash);
         }
         return;
     }
