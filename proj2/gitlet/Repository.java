@@ -681,7 +681,6 @@ public class Repository {
 
         // find the lowest ancestor
         String split = findLowestAncestor(bName, currentBranch);
-        System.out.println("split is " + split);
         if (split.equals(branches.get(bName))) {
             printExit("Given branch is an ancestor of the current branch.");
         }
