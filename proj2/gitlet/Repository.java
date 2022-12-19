@@ -308,7 +308,8 @@ public class Repository {
 
         // check if the version is same as current commit
         // if not same/not in current commit or in current staged, add to staged
-        if (currCommit.files.get(file) == null || !fileSha1.equals(currCommit.files.get(file)) || staged.containsKey(file)) {
+        if (currCommit.files.get(file) == null || !fileSha1.equals(currCommit.files.get(file))) {
+//            && (staged.get(file) == null || !fileSha1.equals(staged.get(file)))
             // store the file into objects directory
             try {
                 // if another version of file already in the staged area, replace it
@@ -322,13 +323,14 @@ public class Repository {
             } catch (Exception e) {
                 System.err.println(e);
             }
-
             // else remove from the staged area / do not add
         } else {
             // if not in staged area, remove from stages and delete the corresponding file
             if (staged.get(file) != null) {
                 File needDelete = join(STAGED_DIR, staged.get(file));
                 needDelete.delete();
+            }
+            if (staged.containsKey(file)) {
                 staged.remove(file);
             }
         }
@@ -345,6 +347,9 @@ public class Repository {
         if (staged.size() == 0) {
             System.out.println("No changes added to the commit.");
             System.exit(0);
+        }
+        if (msg.equals("")) {
+            printExit("Please enter a commit message.");
         }
         forwardCommit(msg, null);
         return;
@@ -496,11 +501,11 @@ public class Repository {
         System.out.println();
         // print modification not staged for commit
         System.out.println("=== Modifications Not Staged for Commit ===");
-        printList(modList);
+//        printList(modList);
         System.out.println();
         // print untracked file (not in staged and current commit)
         System.out.println("=== Untracked Files ===");
-        printList(untrackedList);
+//        printList(untrackedList);
         System.out.println();
         return;
     }
