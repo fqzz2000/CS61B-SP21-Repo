@@ -307,8 +307,8 @@ public class Repository {
         Commit currCommit = getCommit(head);
 
         // check if the version is same as current commit
-        // if not same/not in in current commit, add to staged
-        if (currCommit.files.get(file) == null || !fileSha1.equals(currCommit.files.get(file))) {
+        // if not same/not in current commit or in current staged, add to staged
+        if (currCommit.files.get(file) == null || !fileSha1.equals(currCommit.files.get(file)) || staged.containsKey(file)) {
             // store the file into objects directory
             try {
                 // if another version of file already in the staged area, replace it
@@ -376,7 +376,6 @@ public class Repository {
             }
             // marked as removed and save staged
             staged.put(rmFile, null);
-
         }
         // save staged
         writeObject(join(GITLET_DIR, "STAGED"), staged);
@@ -455,7 +454,7 @@ public class Repository {
         for (String file : curr.files.keySet()) {
             if (!join(CWD, file).exists() && !staged.containsKey(file)) {
                 modList.add(file + "(delete)");
-            } else {
+            } else if (join(CWD, file).exists()) {
                 byte[] fileContent = readContents(join(CWD, file));
                 String fileSha1 = sha1(fileContent);
                 if (!curr.files.get(file).equals(fileSha1)) {
