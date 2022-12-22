@@ -768,10 +768,9 @@ public class Repository {
             }
             //  ########################### other case ######################
             // remain unchanged
-
-            // Commit the Change
-            forwardCommit("Merged " +  bName+ " into " + currentBranch + " .", otherHash);
         }
+        // Commit the Change
+        forwardCommit("Merged " +  bName+ " into " + currentBranch + " .", branches.get(bName));
         return;
     }
 }
