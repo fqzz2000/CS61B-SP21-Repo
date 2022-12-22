@@ -463,7 +463,7 @@ public class Repository {
                 byte[] fileContent = readContents(join(CWD, file));
                 String fileSha1 = sha1(fileContent);
                 if (!curr.files.get(file).equals(fileSha1)) {
-                    if (staged.get(file) == null || !staged.get(file).equals(fileSha1)){
+                    if (!staged.containsKey(file) || !staged.get(file).equals(fileSha1)){
                         modList.add(file + "(modified)");
                     }
                 }
@@ -501,11 +501,11 @@ public class Repository {
         System.out.println();
         // print modification not staged for commit
         System.out.println("=== Modifications Not Staged for Commit ===");
-//        printList(modList);
+        printList(modList);
         System.out.println();
         // print untracked file (not in staged and current commit)
         System.out.println("=== Untracked Files ===");
-//        printList(untrackedList);
+        printList(untrackedList);
         System.out.println();
         return;
     }
