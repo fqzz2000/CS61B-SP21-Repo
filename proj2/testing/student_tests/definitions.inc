@@ -13,4 +13,6 @@ D ARBLINES "(?:(?:.|\n)*(?:\n|\Z)|\A|\Z)"
 D DATE_T "Date: .* [-+]\d\d\d\d"
 # A status log header RE without Date
 D COMMIT_HEAD_T "commit ([a-f0-9]+)[ \t]*\n(?:Merge:\s+[0-9a-f]{7}\s+[0-9a-f]{7}[ ]*\n)?${DATE_T}"
+# some ddd
+D COMMIT_LOG_T "(===[ ]*\ncommit [a-f0-9]+[ ]*\n(?:Merge:\s+[0-9a-f]{7}\s+[0-9a-f]{7}[ ]*\n)?${DATE_T}[ ]*\n(?:.|\n)*?(?=\Z|\n===))"
 

@@ -3,21 +3,22 @@ package gitlet;
 
 
 import java.io.File;
+import java.io.IOException;
 import java.util.*;
 
 import static gitlet.Utils.*;
 
-// TODO: any imports you need here
+
 
 /** Represents a gitlet repository.
- *  TODO: It's a good idea to give a description here of what else this Class
+ *
  *  does at a high level.
  *
  *  @author Quanzhi
  */
 public class Repository {
     /**
-     * TODO: add instance variables here.
+     *
      *
      * List all instance variables of the Repository class here with a useful
      * comment above them describing what that variable represents and how that
@@ -32,7 +33,7 @@ public class Repository {
     public static final File COMMITS_DIR = join(GITLET_DIR, "commits");
     public static final File STAGED_DIR = join(GITLET_DIR, "stagedObj");
 
-    /* TODO: fill in the rest of this class. */
+
     // copy the given file from source directory to target directory
     private static void copyFileTo(String fName, File sourceDir, String tName, File targetDir) {
         File sourceFile = join(sourceDir, fName);
@@ -45,7 +46,7 @@ public class Repository {
                 targetFile.createNewFile();
             }
             writeContents(targetFile, readContents(sourceFile));
-        } catch(Exception e) {
+        } catch (IOException e) {
             printExit("fail to create the file");
         }
     }
@@ -59,8 +60,8 @@ public class Repository {
         >>>>>>>
      */
     private static String getConfMsg(String headHash, String otherHash) {
-        String headString = "\n";
-        String otherString = "\n";
+        String headString = "";
+        String otherString = "";
         if (headHash != null) {
             File headFile = join(OBJECTS_DIR, headHash);
             headString = readContentsAsString(headFile);
@@ -81,7 +82,7 @@ public class Repository {
                 targetFile.createNewFile();
             }
             writeContents(targetFile, content);
-        } catch (Exception e) {
+        } catch (IOException e) {
             printExit("fail to create new file");
         }
     }
@@ -113,13 +114,15 @@ public class Repository {
     // get staged map from the file system
     private static HashMap<String, String> getStaged() {
         File stagedPath = join(GITLET_DIR, "STAGED");
-        HashMap<String, String> staged = readObject(stagedPath, (new HashMap<String, String>()).getClass());
+        HashMap<String, String> staged = readObject(stagedPath,
+                                                    (new HashMap<String, String>()).getClass());
         return staged;
     }
     // get branches
     private static HashMap<String, String> getBranch() {
         File branchesPath = join(GITLET_DIR, "BRANCHES");
-        HashMap<String, String> branch = readObject(branchesPath, (new HashMap<String, String>()).getClass());
+        HashMap<String, String> branch = readObject(branchesPath,
+                                                    (new HashMap<String, String>()).getClass());
         return branch;
     }
     // clear CWD and copy all files from the given commit to CWD
@@ -132,10 +135,12 @@ public class Repository {
         }
         staged.clear();
         writeObject(join(GITLET_DIR, "STAGED"), staged);
-
-        // delete all files in CWD
+        Commit curr = getCommit(getHead());
+        // delete all files in current commit
         for (String file : plainFilenamesIn(CWD)) {
-            join(CWD, file).delete();
+            if (curr.files.containsKey(file)) {
+                join(CWD, file).delete();
+            }
         }
 
         // copy all files from branch needed
@@ -146,7 +151,7 @@ public class Repository {
                 newFile.createNewFile();
                 byte[] newContent = readContents(join(OBJECTS_DIR, commit.files.get(key)));
                 writeContents(newFile, newContent);
-            } catch (Exception e) {
+            } catch (IOException e) {
                 System.err.println(e);
             }
         }
@@ -157,9 +162,11 @@ public class Repository {
         System.out.println("===");
         System.out.println("commit " + commitHash);
         if (commit.secondParent != null) {
-            System.out.println("Merge: " + commit.parent.substring(0, 7) + " " + commit.secondParent.substring(0, 7));
+            System.out.println("Merge: "
+                    + commit.parent.substring(0, 7) + " " + commit.secondParent.substring(0, 7));
         }
-        System.out.println(String.format("Date: %1$ta %1$tb %1$te %1$tT %1$tY %1$tz", commit.date));
+        System.out.println(String.format("Date: %1$ta %1$tb %1$te %1$tT %1$tY %1$tz",
+                                            commit.date));
         System.out.println(commit.message);
         System.out.println();
         return;
@@ -188,18 +195,24 @@ public class Repository {
             File copiedFile = join(OBJECTS_DIR, entry.getValue());
             try {
                 copiedFile.createNewFile();
-            } catch (Exception e) {
+            } catch (IOException e) {
                 System.err.println(e);
                 System.exit(0);
             }
             File stagedFile = join(STAGED_DIR, entry.getValue());
             byte[] stagedContent = readContents(stagedFile);
             writeContents(copiedFile, stagedContent);
-            // delete corresponding file in stagedObj
-            stagedFile.delete();
+
+
+
         }
         // empty the staged Map and save back
         staged.clear();
+        // empty staged area
+        for (String file : plainFilenamesIn(STAGED_DIR)) {
+            join(STAGED_DIR, file).delete();
+        }
+
         writeObject(join(GITLET_DIR, "STAGED"), staged);
         // save the new commit
         String newSha1 = sha1(serialize(newCommit));
@@ -252,17 +265,16 @@ public class Repository {
             COMMITS_DIR.mkdir();
             STAGED_DIR.mkdir();
         } else {
-            System.err.println("A Gitlet version-control system already exists in the current directory.");
-            System.exit(0);
+            printExit("A Gitlet version-control system already exists in the current directory.");
         }
         // create the initial commit
         Date start = new Date(0);
         Commit init = new Commit("initial commit", null, start);
         try {
             String commitName = sha1(serialize(init));
-            File init_commit = join(COMMITS_DIR, commitName);
-            init_commit.createNewFile();
-            writeObject(init_commit, init);
+            File initCommit = join(COMMITS_DIR, commitName);
+            initCommit.createNewFile();
+            writeObject(initCommit, init);
             // create head pointer
             File head = join(GITLET_DIR, "HEAD");
             head.createNewFile();
@@ -270,16 +282,16 @@ public class Repository {
             writeContents(head, commitName + "\nmaster");
             // initialize staged field
             HashMap<String, String> staged = new HashMap<>();
-            File staged_file = join(GITLET_DIR, "STAGED");
-            staged_file.createNewFile();
-            writeObject(staged_file, staged);
+            File stagedFile = join(GITLET_DIR, "STAGED");
+            stagedFile.createNewFile();
+            writeObject(stagedFile, staged);
             // initialize branches
             HashMap<String, String> branches = new HashMap<>();
             // set master to initial commit
             branches.put("master", commitName);
-            File branch_file = join(GITLET_DIR, "BRANCHES");
-            writeObject(branch_file, branches);
-        } catch (Exception e) {
+            File branchFile = join(GITLET_DIR, "BRANCHES");
+            writeObject(branchFile, branches);
+        } catch (IOException e) {
             System.err.println(e);
         }
     }
@@ -287,7 +299,8 @@ public class Repository {
     public static void add(String file) {
         // validate if there is an initialized repo
         validateRepoExisted();
-        if (file.substring(file.length() - 1) == "/" || file.substring(file.length() - 1) == "\\") {
+        if (file.substring(file.length() - 1).equals("/")
+                || file.substring(file.length() - 1).equals("\\")) {
             file = file.substring(0, file.length() - 1);
         }
         // process file to be added
@@ -320,7 +333,7 @@ public class Repository {
                 toAddInObj.createNewFile();
                 writeContents(toAddInObj, fileContent);
                 staged.put(file, fileSha1); // add file to be added to staged area
-            } catch (Exception e) {
+            } catch (IOException e) {
                 System.err.println(e);
             }
             // else remove from the staged area / do not add
@@ -343,7 +356,8 @@ public class Repository {
         validateRepoExisted();
 
         // check if the staged area is empty
-        HashMap<String, String> staged = readObject(join(GITLET_DIR, "STAGED"), (new HashMap<String, String>()).getClass());
+        HashMap<String, String> staged = readObject(join(GITLET_DIR, "STAGED"),
+                                            (new HashMap<String, String>()).getClass());
         if (staged.size() == 0) {
             System.out.println("No changes added to the commit.");
             System.exit(0);
@@ -373,7 +387,8 @@ public class Repository {
             fileToRemove.delete();
             staged.remove(rmFile);
         }
-        // if the file is in the current commit, remove it from dir and mark it as removal in staged map
+        // if the file is in the current commit, remove it from dir
+        // and mark it as removal in staged map
         if (currentCommit.files.get(rmFile) != null) {
             // remove from current dir
             if (join(CWD, rmFile).exists()) {
@@ -463,7 +478,7 @@ public class Repository {
                 byte[] fileContent = readContents(join(CWD, file));
                 String fileSha1 = sha1(fileContent);
                 if (!curr.files.get(file).equals(fileSha1)) {
-                    if (!staged.containsKey(file) || !staged.get(file).equals(fileSha1)){
+                    if (!staged.containsKey(file) || !staged.get(file).equals(fileSha1)) {
                         modList.add(file + "(modified)");
                     }
                 }
@@ -522,7 +537,8 @@ public class Repository {
         }
         for (String file : plainFilenamesIn(CWD)) {
             if (!curr.files.containsKey(file) && !staged.containsKey(file)) {
-                printExit("There is an untracked file in the way; delete it, or add and commit it first.");
+                printExit("There is an untracked file in "
+                       + "the way; delete it, or add and commit it first.");
             }
         }
         String newBranchHead = branches.get(bName);
@@ -547,7 +563,7 @@ public class Repository {
                 newFile.createNewFile();
             }
             writeContents(newFile, cont);
-        } catch (Exception e) {
+        } catch (IOException e) {
             System.err.println(e);
             System.exit(0);
         }
@@ -587,7 +603,7 @@ public class Repository {
                 writeFile.createNewFile();
             }
             writeContents(writeFile, fileContent);
-        } catch (Exception e) {
+        } catch (IOException e) {
             System.err.println(e);
             System.exit(0);
         }
@@ -625,10 +641,12 @@ public class Repository {
         String head = getHead();
         String bName = getHeadBranch();
         Commit curr = getCommit(head);
+        HashMap<String, String> branches = getBranch();
         HashMap<String, String> staged = getStaged();
         for (String file : plainFilenamesIn(CWD)) {
             if (!curr.files.containsKey(file) && !staged.containsKey(file)) {
-                printExit("There is an untracked file in the way; delete it, or add and commit it first.");
+                printExit("There is an untracked file in the way; "
+                       + "delete it, or add and commit it first.");
             }
         }
         ArrayList<String> commits  = searchCommitName(commitName);
@@ -643,6 +661,10 @@ public class Repository {
         // update HEAD
         String newHeadInfo = commitName + "\n" + bName;
         writeContents(join(GITLET_DIR, "HEAD"), newHeadInfo);
+        // update branch
+        branches.put(bName, commitName);
+        writeObject(join(GITLET_DIR, "BRANCHES"), branches);
+
     }
     // find the lowest ancestor of two branch.
     private static String findLowestAncestor(String branch1, String branch2) {
@@ -682,7 +704,6 @@ public class Repository {
         if (!branches.containsKey(bName)) {
             printExit("A branch with that name does not exist.");
         }
-
         // find the lowest ancestor
         String split = findLowestAncestor(bName, currentBranch);
         if (split.equals(branches.get(bName))) {
@@ -691,21 +712,21 @@ public class Repository {
         if (split.equals(branches.get(currentBranch))) {
             System.out.println("Current branch fast-forwarded.");
             checkoutBranch(bName);
-
         }
         for (String file : plainFilenamesIn(CWD)) {
             if (!curr.files.containsKey(file) && !staged.containsKey(file)) {
-                printExit("There is an untracked file in the way; delete it, or add and commit it first.");
+                printExit("There is an untracked file in the way; "
+                        + "delete it, or add and commit it first.");
             }
         }
-
         Commit splitCommit = getCommit(split);
         Commit headCommit = getCommit(getHead());
         Commit otherCommit = getCommit(branches.get(bName));
         // conduct 8 rules
 
         // iterate through all files in otherCommit and splitCommit
-        // no need to iterate files in headCummit because if a file present in head but not in split and other
+        // no need to iterate files in headCummit because if a file
+        // present in head but not in split and other
         // we don't need to do anything with it
 
         //all files in otherCommit and splitCommit
@@ -730,7 +751,8 @@ public class Repository {
                 add(file);
             }
             // if file modified in otherCommit, no change in head copy to CWD
-            if (inSplit && inOther && inHead && headHash.equals(splitHash) && !otherHash.equals(headHash)) {
+            if (inSplit && inOther && inHead && headHash.equals(splitHash)
+                    && !otherHash.equals(headHash)) {
                 // copy otherHash to CWD
                 copyFileTo(otherHash, OBJECTS_DIR, file, CWD);
                 // add file to staged
@@ -744,12 +766,11 @@ public class Repository {
             }
             // ############## conflict case #############
             // both modified
-            if (inSplit && inOther && inHead &&
-                    !splitHash.equals(headHash) &&
-                    !headHash.equals(otherHash) &&
-                    !otherHash.equals(splitHash)) {
-                    handleConf(headHash, otherHash, file);
-
+            if (inSplit && inOther && inHead
+                && !splitHash.equals(headHash)
+                && !headHash.equals(otherHash)
+                && !otherHash.equals(splitHash)) {
+                handleConf(headHash, otherHash, file);
             }
             // both add but different content
             if (!inSplit && inOther && inHead && !otherHash.equals(headHash)) {
@@ -764,13 +785,13 @@ public class Repository {
             // head modified other rmeoved
             if (inSplit && !inOther && inHead && !headHash.equals(splitHash)) {
                 // conflict case
+//                System.out.println("should be this!!");
                 handleConf(headHash, otherHash, file);
             }
-            //  ########################### other case ######################
-            // remain unchanged
         }
         // Commit the Change
-        forwardCommit("Merged " +  bName+ " into " + currentBranch + " .", branches.get(bName));
+        forwardCommit("Merged " +  bName + " into "
+                + currentBranch + ".", branches.get(bName));
         return;
     }
 }

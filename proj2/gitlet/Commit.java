@@ -1,23 +1,21 @@
 package gitlet;
 
-// TODO: any imports you need here
+
 
 import java.io.Serializable;
 import java.text.SimpleDateFormat;
-import java.util.Date; // TODO: You'll likely use this in this class
+import java.util.Date;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /** Represents a gitlet commit object.
- *  TODO: It's a good idea to give a description here of what else this Class
  *  does at a high level.
  *
  *  @author Quanzhi
  */
 public class Commit implements Serializable {
     /**
-     * TODO: add instance variables here.
+     *
      *
      * List all instance variables of the Commit class here with a useful
      * comment above them describing what that variable represents and how that
@@ -28,10 +26,10 @@ public class Commit implements Serializable {
     protected String message;
     protected String parent;
     protected String secondParent;
-    protected Map<String,String> files;
-    /* TODO: fill in the rest of this class. */
+    protected Map<String, String> files;
     protected Date date;
-    public Commit() {}
+    public Commit() {
+    }
     public Commit(String msg, String parent, Date date) {
         this.message = msg;
         this.parent = parent;
