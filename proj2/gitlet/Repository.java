@@ -700,20 +700,25 @@ public class Repository {
         String ptr1 = branches.get(branch1);
         String ptr2 = branches.get(branch2);
         // find lowest ancestor
-        while (branch1 != null && branch2 != null) {
+        while (ptr1 != null || ptr2 != null) {
             // if ptr in hashset, means that we found common ancestor
-            if (ancestors.contains(ptr1)) {
-                return ptr1;
+
+            if (ptr1 != null) {
+                if (ancestors.contains(ptr1)) {
+                    return ptr1;
+                }
+                ancestors.add(ptr1);
+                Commit ptr1Commit = getCommit(ptr1);
+                ptr1 = ptr1Commit.parent;
             }
-            ancestors.add(ptr1);
-            Commit ptr1Commit = getCommit(ptr1);
-            ptr1 = ptr1Commit.parent;
-            if (ancestors.contains(ptr2)) {
-                return ptr2;
+            if (ptr2 != null) {
+                if (ancestors.contains(ptr2)) {
+                    return ptr2;
+                }
+                ancestors.add(ptr2);
+                Commit ptr2Commit = getCommit(ptr2);
+                ptr2 = ptr2Commit.parent;
             }
-            ancestors.add(ptr2);
-            Commit ptr2Commit = getCommit(ptr2);
-            ptr2 = ptr2Commit.parent;
         }
         return null;
     }
