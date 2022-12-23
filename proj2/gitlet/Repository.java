@@ -95,6 +95,33 @@ public class Repository {
         // staged file for change
         add(file);
     }
+    private static void confMerge(boolean inSplit, boolean inOther, boolean inHead,
+                             String otherHash, String splitHash, String headHash,
+                             String file) {
+        // both modified
+        if (inSplit && inOther && inHead
+                && !splitHash.equals(headHash)
+                && !headHash.equals(otherHash)
+                && !otherHash.equals(splitHash)) {
+            handleConf(headHash, otherHash, file);
+        }
+        // both add but different content
+        if (!inSplit && inOther && inHead && !otherHash.equals(headHash)) {
+            // conflict case
+            handleConf(headHash, otherHash, file);
+        }
+        // other modified head removed
+        if (inSplit && inOther && !inHead && !otherHash.equals(splitHash)) {
+            // conflict case
+            handleConf(headHash, otherHash, file);
+        }
+        // head modified other rmeoved
+        if (inSplit && !inOther && inHead && !headHash.equals(splitHash)) {
+            // conflict case
+//                System.out.println("should be this!!");
+            handleConf(headHash, otherHash, file);
+        }
+    }
     // add a file to staged and write back to dir
     private  static void addToStaged(String key, String value, File sourceDir) {
         // copy file to map
@@ -723,17 +750,14 @@ public class Repository {
         Commit headCommit = getCommit(getHead());
         Commit otherCommit = getCommit(branches.get(bName));
         // conduct 8 rules
-
         // iterate through all files in otherCommit and splitCommit
         // no need to iterate files in headCummit because if a file
         // present in head but not in split and other
         // we don't need to do anything with it
-
         //all files in otherCommit and splitCommit
         HashSet<String> allFiles = new HashSet<>();
         allFiles.addAll(splitCommit.files.keySet());
         allFiles.addAll(otherCommit.files.keySet());
-
         // iterate through all files
         for (String file : allFiles) {
             boolean inSplit = splitCommit.files.containsKey(file);
@@ -765,29 +789,7 @@ public class Repository {
                 rm(file);
             }
             // ############## conflict case #############
-            // both modified
-            if (inSplit && inOther && inHead
-                && !splitHash.equals(headHash)
-                && !headHash.equals(otherHash)
-                && !otherHash.equals(splitHash)) {
-                handleConf(headHash, otherHash, file);
-            }
-            // both add but different content
-            if (!inSplit && inOther && inHead && !otherHash.equals(headHash)) {
-                // conflict case
-                handleConf(headHash, otherHash, file);
-            }
-            // other modified head removed
-            if (inSplit && inOther && !inHead && !otherHash.equals(splitHash)) {
-                // conflict case
-                handleConf(headHash, otherHash, file);
-            }
-            // head modified other rmeoved
-            if (inSplit && !inOther && inHead && !headHash.equals(splitHash)) {
-                // conflict case
-//                System.out.println("should be this!!");
-                handleConf(headHash, otherHash, file);
-            }
+            confMerge(inSplit, inOther, inHead, otherHash, splitHash, headHash, file);
         }
         // Commit the Change
         forwardCommit("Merged " +  bName + " into "
